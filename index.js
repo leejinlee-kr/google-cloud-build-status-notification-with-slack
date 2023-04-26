@@ -1,3 +1,5 @@
+require('dotenv').config()
+
 /**
  * Triggered from a message on a Cloud Pub/Sub topic.
  *
@@ -9,4 +11,6 @@ exports.helloPubSub = (event, context) => {
     ? Buffer.from(event.data, 'base64').toString()
     : 'Hello, World';
   console.log(message);
+
+  console.log(process.env.SLACK_TEST_CICD_MONITORING_WEBHOOK_URL)
 };

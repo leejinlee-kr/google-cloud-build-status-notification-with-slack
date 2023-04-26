@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "@google-cloud/pubsub": "^3.5.1"
+    "@google-cloud/pubsub": "^3.5.1",
+    "dotenv": "^16.0.3"
   }
 }
