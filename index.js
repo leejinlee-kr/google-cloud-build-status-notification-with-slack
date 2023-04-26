@@ -1,4 +1,145 @@
-require('dotenv').config()
+const { IncomingWebhook } = require('@slack/client');
+
+require('dotenv').config();
+let webhook;
+
+const statusCodes = {
+  CANCELLED: {
+    color: '#fbbc05',
+    text: '빌드 취소' // 'Build cancelled'
+  },
+  FAILURE: {
+    color: '#ea4335',
+    text: '빌드 실패' //'Build failed'
+  },
+  INTERNAL_ERROR: {
+    color: '#ea4335',
+    text: '빌드 내부 오류' // 'Internal error encountered during build'
+  },
+  QUEUED: {
+    color: '#fbbc05',
+    text: '빌드 대기' // 'New build queued'
+  },
+  SUCCESS: {
+    color: '#34a853',
+    text: '빌드 성공' // 'Build successfully completed'
+  },
+  TIMEOUT: {
+    color: '#ea4335',
+    text: '빌드 타임아웃' // 'Build timed out'
+  },
+  WORKING: {
+    color: '#34a853',
+    text: '빌드 시작' // 'New build in progress'
+  }
+};
+
+const getTriggerEventInfo = (build) => {
+  let triggerEventInfo = {};
+  let gitRepoName = build.substitutions.REPO_NAME;
+  let commitSha = build.substitutions.SHORT_SHA;
+
+  if(build.substitutions.TAG_NAME){
+    triggerEventInfo['TRIGGER_EVENT'] = "TAG";
+    triggerEventInfo['TRIGGER_EVENT_DATA'] = build.substitutions.TAG_NAME;
+    triggerEventInfo['TRIGGER_EVENT_URL'] = process.env.GITHUB_URL +
+      gitRepoName + '/releases/tag/' + triggerEventInfo['TRIGGER_EVENT_DATA'];
+    triggerEventInfo['COMMIT_SHA'] = commitSha;
+    triggerEventInfo['COMMIT_URL'] = process.env.GITHUB_URL +
+      gitRepoName + '/commit/' + triggerEventInfo['COMMIT_SHA'];
+  }else if(build.substitutions.BRANCH_NAME){
+    triggerEventInfo['TRIGGER_EVENT'] = "BRANCH";
+    triggerEventInfo['TRIGGER_EVENT_DATA'] = build.substitutions.BRANCH_NAME;
+    triggerEventInfo['TRIGGER_EVENT_URL'] = process.env.GITHUB_URL +
+      gitRepoName + '/tree/' + triggerEventInfo['TRIGGER_EVENT_DATA'];
+    triggerEventInfo['COMMIT_SHA'] = commitSha;
+    triggerEventInfo['COMMIT_URL'] = process.env.GITHUB_URL +
+      gitRepoName + '/commit/' + triggerEventInfo['COMMIT_SHA'];
+  }else{
+    triggerEventInfo['TRIGGER_EVENT'] = "UNKNOWN";
+    triggerEventInfo['TRIGGER_EVENT_DATA'] = "UNKNOWN";
+    triggerEventInfo['TRIGGER_EVENT_URL'] = "UNKNOWN";
+    triggerEventInfo['COMMIT_SHA'] = commitSha;
+    triggerEventInfo['COMMIT_URL'] = process.env.GITHUB_URL +
+      gitRepoName + '/commit/' + triggerEventInfo['COMMIT_SHA'];
+  }
+  return triggerEventInfo;
+}
+
+// createSlackMessage create a message from a build object.
+const createSlackMessage = (build) => {
+  const statusMessage = statusCodes[build.status].text;
+  const cloudBuildId = build.id;
+  const cloudBuildTriggerName = build.substitutions.TRIGGER_NAME;
+  const logUrl = build.logUrl;
+  const tags = build.tags;
+  // let mentions = getMentions(tags);
+
+  // let serviceName = getServiceName(tags);
+  // let serviceCategory = getServiceCategory(tags);
+  // let applicationType = getApplicationType(tags);
+
+  let triggerEventInfo = getTriggerEventInfo(build);
+  let triggerEvent = triggerEventInfo['TRIGGER_EVENT'];
+  let triggerEventData = triggerEventInfo['TRIGGER_EVENT_DATA'];
+  let triggerEventURL = triggerEventInfo['TRIGGER_EVENT_URL'];
+  let commitSHA = triggerEventInfo['COMMIT_SHA'];
+  let commitURL = triggerEventInfo['COMMIT_URL'];
+
+  const title = {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      // text: `[ ${statusMessage} ] ${serviceName} ${serviceCategory} ${applicationType} ( \`${cloudBuildTriggerName}\` )`
+      text: `[ ${statusMessage} ] ( \`${cloudBuildTriggerName}\` )`
+      // `${statusMessage} for Cloud Build Trigger Name: \`${cloudBuildTriggerName}\``
+    }
+  };
+
+  const buildStatus = {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*Build Log:* <${logUrl}|${cloudBuildId}>`
+    }
+  };
+
+  const context = {
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `*${triggerEvent}:* <${triggerEventURL}|${triggerEventData}>`
+      },
+      {
+        type: 'mrkdwn',
+        text: `*COMMIT:* <${commitURL}|${commitSHA}>`
+      },
+      // {
+      //     type: 'mrkdwn',
+      //     text: `*MENTION:* ${mentions}`
+      // }
+    ]
+  };
+
+  const message = {
+    attachments: [
+      {
+        blocks: [
+          title
+        ],
+        color: statusCodes[build.status].color
+      }
+    ]
+  };
+
+  if(build.status.includes('SUCCESS' || 'CANCELLED' || 'FAILURE' || 'INTERNAL_ERROR' || 'TIMEOUT')){
+    message.attachments[0].blocks.push(buildStatus);
+    message.attachments[0].blocks.push(context);
+  }
+
+  return message;
+}
 
 /**
  * Triggered from a message on a Cloud Pub/Sub topic.
@@ -6,11 +147,33 @@ require('dotenv').config()
  * @param {!Object} event Event payload.
  * @param {!Object} context Metadata for the event.
  */
-exports.helloPubSub = (event, context) => {
-  const message = event.data
-    ? Buffer.from(event.data, 'base64').toString()
-    : 'Hello, World';
-  console.log(message);
+exports.helloPubSub  = (event, context) => {
 
-  console.log(process.env.SLACK_TEST_CICD_MONITORING_WEBHOOK_URL)
+  const build = event.data
+    ? JSON.parse(Buffer.from(event.data, 'base64').toString())
+    : null;
+
+  if (build == null) {
+    return;
+  }
+  console.log("build : ", build);
+
+  const status = ['CANCELLED', 'QUEUED', 'WORKING', 'SUCCESS', 'FAILURE', 'INTERNAL_ERROR', 'TIMEOUT'];
+  if (status.indexOf(build.status) === -1) {
+    return;
+  }
+
+  const tags = build.tags;
+
+  if (tags.includes('DEV')){
+    webhook = new IncomingWebhook(process.env.SLACK_DEV_CICD_MONITORING_WEBHOOK_URL);
+  }else if(tags.includes('PROD')){
+    webhook = new IncomingWebhook(process.env.SLACK_PROD_CICD_MONITORING_WEBHOOK_URL);
+  }else{
+    webhook = new IncomingWebhook(process.env.SLACK_TEST_CICD_MONITORING_WEBHOOK_URL);
+  }
+
+  // Send message to Slack.
+  const message = createSlackMessage(build);
+  webhook.send(message);
 };
