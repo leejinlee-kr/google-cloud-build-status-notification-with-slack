@@ -37,22 +37,18 @@ const getService = (tags) => {
   const serviceTag = tags.find(tag => tag.startsWith("Service_"));
   return serviceTag ? serviceTag.split("Service_")[1] : "";
 }
-
 const getMainCategory = (tags) => {
   const mainCategoryTag = tags.find(tag => tag.startsWith("MainCategory_"));
   return mainCategoryTag ? mainCategoryTag.split("MainCategory_")[1] : "";
 }
-
 const getApplicationType = (tags) => {
   const applicationTypeTag = tags.find(tag => tag.startsWith("AppType_"));
   return applicationTypeTag ? applicationTypeTag.split("AppType_")[1] : "";
 }
-
 const getPIC = (tags) => {
   const picTag = tags.find(tag => tag.startsWith("PIC_"));
   return picTag ? picTag.split("PIC_")[1] : "";
 }
-
 const getTriggerEventInfo = (build) => {
   let triggerEventInfo = {};
   let gitRepoName = build.substitutions.REPO_NAME;
@@ -61,30 +57,22 @@ const getTriggerEventInfo = (build) => {
   if(build.substitutions.TAG_NAME){
     triggerEventInfo['TRIGGER_EVENT'] = "TAG";
     triggerEventInfo['TRIGGER_EVENT_DATA'] = build.substitutions.TAG_NAME;
-    triggerEventInfo['TRIGGER_EVENT_URL'] = process.env.GITHUB_URL +
-      gitRepoName + '/releases/tag/' + triggerEventInfo['TRIGGER_EVENT_DATA'];
-    triggerEventInfo['COMMIT_SHA'] = commitSha;
-    triggerEventInfo['COMMIT_URL'] = process.env.GITHUB_URL +
-      gitRepoName + '/commit/' + triggerEventInfo['COMMIT_SHA'];
+    triggerEventInfo['TRIGGER_EVENT_URL'] = process.env.GITHUB_URL + gitRepoName + '/releases/tag/' + triggerEventInfo['TRIGGER_EVENT_DATA'];
   }else if(build.substitutions.BRANCH_NAME){
     triggerEventInfo['TRIGGER_EVENT'] = "BRANCH";
     triggerEventInfo['TRIGGER_EVENT_DATA'] = build.substitutions.BRANCH_NAME;
-    triggerEventInfo['TRIGGER_EVENT_URL'] = process.env.GITHUB_URL +
-      gitRepoName + '/tree/' + triggerEventInfo['TRIGGER_EVENT_DATA'];
-    triggerEventInfo['COMMIT_SHA'] = commitSha;
-    triggerEventInfo['COMMIT_URL'] = process.env.GITHUB_URL +
-      gitRepoName + '/commit/' + triggerEventInfo['COMMIT_SHA'];
+    triggerEventInfo['TRIGGER_EVENT_URL'] = process.env.GITHUB_URL + gitRepoName + '/tree/' + triggerEventInfo['TRIGGER_EVENT_DATA'];
   }else{
     triggerEventInfo['TRIGGER_EVENT'] = "UNKNOWN";
     triggerEventInfo['TRIGGER_EVENT_DATA'] = "UNKNOWN";
     triggerEventInfo['TRIGGER_EVENT_URL'] = "UNKNOWN";
-    triggerEventInfo['COMMIT_SHA'] = commitSha;
-    triggerEventInfo['COMMIT_URL'] = process.env.GITHUB_URL +
-      gitRepoName + '/commit/' + triggerEventInfo['COMMIT_SHA'];
   }
+
+  triggerEventInfo['COMMIT_SHA'] = commitSha;
+  triggerEventInfo['COMMIT_URL'] = process.env.GITHUB_URL + gitRepoName + '/commit/' + triggerEventInfo['COMMIT_SHA'];
+
   return triggerEventInfo;
 }
-
 // createSlackMessage create a message from a build object.
 const createSlackMessage = (build) => {
   const statusMessage = statusCodes[build.status].text;
@@ -156,7 +144,6 @@ const createSlackMessage = (build) => {
 
   return message;
 }
-
 /**
  * Triggered from a message on a Cloud Pub/Sub topic.
  *
