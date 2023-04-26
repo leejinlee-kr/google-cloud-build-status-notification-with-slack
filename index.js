@@ -33,6 +33,25 @@ const statusCodes = {
     text: '빌드 시작' // 'New build in progress'
   }
 };
+const getService = (tags) => {
+  const serviceTag = tags.find(tag => tag.startsWith("Service_"));
+  return serviceTag ? serviceTag.split("Service_")[1] : "";
+}
+
+const getMainCategory = (tags) => {
+  const mainCategoryTag = tags.find(tag => tag.startsWith("MainCategory_"));
+  return mainCategoryTag ? mainCategoryTag.split("MainCategory_")[1] : "";
+}
+
+const getApplicationType = (tags) => {
+  const applicationTypeTag = tags.find(tag => tag.startsWith("AppType_"));
+  return applicationTypeTag ? applicationTypeTag.split("AppType_")[1] : "";
+}
+
+const getPIC = (tags) => {
+  const picTag = tags.find(tag => tag.startsWith("PIC_"));
+  return picTag ? picTag.split("PIC_")[1] : "";
+}
 
 const getTriggerEventInfo = (build) => {
   let triggerEventInfo = {};
@@ -73,11 +92,10 @@ const createSlackMessage = (build) => {
   const cloudBuildTriggerName = build.substitutions.TRIGGER_NAME;
   const logUrl = build.logUrl;
   const tags = build.tags;
-  // let mentions = getMentions(tags);
-
-  // let serviceName = getServiceName(tags);
-  // let serviceCategory = getServiceCategory(tags);
-  // let applicationType = getApplicationType(tags);
+  let mentions = getPIC(tags);
+  let serviceName = getService(tags);
+  let serviceCategory = getMainCategory(tags);
+  let applicationType = getApplicationType(tags);
 
   let triggerEventInfo = getTriggerEventInfo(build);
   let triggerEvent = triggerEventInfo['TRIGGER_EVENT'];
@@ -90,9 +108,7 @@ const createSlackMessage = (build) => {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      // text: `[ ${statusMessage} ] ${serviceName} ${serviceCategory} ${applicationType} ( \`${cloudBuildTriggerName}\` )`
-      text: `[ ${statusMessage} ] ( \`${cloudBuildTriggerName}\` )`
-      // `${statusMessage} for Cloud Build Trigger Name: \`${cloudBuildTriggerName}\``
+      text: `[ ${statusMessage} ] ${serviceName} ${serviceCategory} ${applicationType} ( \`${cloudBuildTriggerName}\` )`
     }
   };
 
@@ -115,10 +131,10 @@ const createSlackMessage = (build) => {
         type: 'mrkdwn',
         text: `*COMMIT:* <${commitURL}|${commitSHA}>`
       },
-      // {
-      //     type: 'mrkdwn',
-      //     text: `*MENTION:* ${mentions}`
-      // }
+      {
+          type: 'mrkdwn',
+          text: `*MENTION:* ${mentions}`
+      }
     ]
   };
 
