@@ -73,10 +73,10 @@ const createSlackMessage = (build) => {
   const logUrl = build.logUrl;
 
   const tags = build.tags;
-  let mentions = getParsedTags(tags, "PIC_");
-  let serviceName = getParsedTags(tags, "Service_");
-  let serviceCategory = getParsedTags(tags, "MainCategory_");
-  let applicationType = getParsedTags(tags, "AppType_");
+  let mentions = getParsedTags(tags, process.env.PREFIX_PIC);
+  let serviceName = getParsedTags(tags, process.env.PREFIX_SERVICE);
+  let serviceCategory = getParsedTags(tags, process.env.PREFIX_CATEGORY);
+  let applicationType = getParsedTags(tags, process.env.PREFIX_APP_TYPE);
 
   let triggerEventInfo = getTriggerEventInfo(build);
   let triggerEvent = triggerEventInfo['TRIGGER_EVENT'];
@@ -170,9 +170,9 @@ exports.helloPubSub  = (event, context) => {
   slackMessage = createSlackMessage(build);
 
   const tags = build.tags;
-  if (getParsedTags(tags, "Env_").includes('DEV')){
+  if (getParsedTags(tags, process.env.PREFIX_ENV).includes('DEV')){
     webhook = new IncomingWebhook(process.env.SLACK_DEV_CICD_MONITORING_WEBHOOK_URL);
-  }else if(getParsedTags(tags, "Env_").includes('PROD')){
+  }else if(getParsedTags(tags, process.env.PREFIX_ENV).includes('PROD')){
     webhook = new IncomingWebhook(process.env.SLACK_PROD_CICD_MONITORING_WEBHOOK_URL);
   }else{
     webhook = new IncomingWebhook(process.env.SLACK_TEST_CICD_MONITORING_WEBHOOK_URL);
