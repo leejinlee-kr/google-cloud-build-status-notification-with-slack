@@ -2,6 +2,7 @@ const { IncomingWebhook } = require('@slack/client');
 
 require('dotenv').config();
 let webhook;
+let slackMessage;
 
 const statusCodes = {
   CANCELLED: {
@@ -79,6 +80,7 @@ const createSlackMessage = (build) => {
   const cloudBuildId = build.id;
   const cloudBuildTriggerName = build.substitutions.TRIGGER_NAME;
   const logUrl = build.logUrl;
+
   const tags = build.tags;
   let mentions = getPIC(tags);
   let serviceName = getService(tags);
@@ -137,10 +139,82 @@ const createSlackMessage = (build) => {
     ]
   };
 
-  if(build.status.includes('SUCCESS' || 'CANCELLED' || 'FAILURE' || 'INTERNAL_ERROR' || 'TIMEOUT')){
-    message.attachments[0].blocks.push(buildStatus);
-    message.attachments[0].blocks.push(context);
-  }
+  message.attachments[0].blocks.push(buildStatus);
+  message.attachments[0].blocks.push(context);
+
+  return message;
+}
+const createFailSlackMessage = (build) => {
+  const statusMessage = statusCodes[build.status].text;
+  const cloudBuildId = build.id;
+  const logUrl = build.logUrl;
+  const cloudBuildTriggerName = build.substitutions.TRIGGER_NAME;
+  const cloudFailureMessage = build.failureInfo.detail;
+
+  const tags = build.tags;
+  let mentions = getPIC(tags);
+  let serviceName = getService(tags);
+  let serviceCategory = getMainCategory(tags);
+  let applicationType = getApplicationType(tags);
+
+  let triggerEventInfo = getTriggerEventInfo(build);
+  let triggerEvent = triggerEventInfo['TRIGGER_EVENT'];
+  let triggerEventData = triggerEventInfo['TRIGGER_EVENT_DATA'];
+  let triggerEventURL = triggerEventInfo['TRIGGER_EVENT_URL'];
+  let commitSHA = triggerEventInfo['COMMIT_SHA'];
+  let commitURL = triggerEventInfo['COMMIT_URL'];
+
+  const title = {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `[ ${statusMessage} ] ${serviceName} ${serviceCategory} ${applicationType} ( \`${cloudBuildTriggerName}\` )`
+    }
+  };
+
+  const buildStatus = {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*Build Log:* <${logUrl}|${cloudBuildId}>`
+    }
+  };
+
+  const context = {
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `*cloudFailtureMessage:* ${cloudFailureMessage}`
+      },
+      {
+        type: 'mrkdwn',
+        text: `*${triggerEvent}:* <${triggerEventURL}|${triggerEventData}>`
+      },
+      {
+        type: 'mrkdwn',
+        text: `*COMMIT:* <${commitURL}|${commitSHA}>`
+      },
+      {
+        type: 'mrkdwn',
+        text: `*MENTION:* ${mentions}`
+      }
+    ]
+  };
+
+  const message = {
+    attachments: [
+      {
+        blocks: [
+          title
+        ],
+        color: statusCodes[build.status].color
+      }
+    ]
+  };
+
+  message.attachments[0].blocks.push(buildStatus);
+  message.attachments[0].blocks.push(context);
 
   return message;
 }
@@ -159,15 +233,21 @@ exports.helloPubSub  = (event, context) => {
   if (build == null) {
     return;
   }
-  console.log("build : ", build);
 
-  const status = ['CANCELLED', 'QUEUED', 'WORKING', 'SUCCESS', 'FAILURE', 'INTERNAL_ERROR', 'TIMEOUT'];
+  // Cloud build all status : 'CANCELLED', 'QUEUED', 'WORKING', 'SUCCESS', 'FAILURE', 'INTERNAL_ERROR', 'TIMEOUT'
+  const status = ['QUEUED', 'CANCELLED', 'WORKING', 'SUCCESS', 'FAILURE', 'INTERNAL_ERROR', 'TIMEOUT'];
   if (status.indexOf(build.status) === -1) {
     return;
   }
 
-  const tags = build.tags;
+  // Send message to Slack.
+  if (build.status.includes('FAILURE')){
+    slackMessage = createFailSlackMessage(build);
+  }else{
+    slackMessage = createSlackMessage(build);
+  }
 
+  const tags = build.tags;
   if (tags.includes('DEV')){
     webhook = new IncomingWebhook(process.env.SLACK_DEV_CICD_MONITORING_WEBHOOK_URL);
   }else if(tags.includes('PROD')){
@@ -175,8 +255,5 @@ exports.helloPubSub  = (event, context) => {
   }else{
     webhook = new IncomingWebhook(process.env.SLACK_TEST_CICD_MONITORING_WEBHOOK_URL);
   }
-
-  // Send message to Slack.
-  const message = createSlackMessage(build);
-  webhook.send(message);
+  webhook.send(slackMessage);
 };
