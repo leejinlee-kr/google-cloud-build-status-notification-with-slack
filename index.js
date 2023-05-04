@@ -34,6 +34,10 @@ const statusCodes = {
     text: '빌드 시작' // 'New build in progress'
   }
 };
+const getEnviornment = (tags) => {
+  const environment = tags.find(tag => tag.startsWith("Env_"));
+  return environment ? environment.split("Env_")[1] : "";
+}
 const getService = (tags) => {
   const serviceTag = tags.find(tag => tag.startsWith("Service_"));
   return serviceTag ? serviceTag.split("Service_")[1] : "";
@@ -80,6 +84,7 @@ const createSlackMessage = (build) => {
   const cloudBuildId = build.id;
   const cloudBuildTriggerName = build.substitutions.TRIGGER_NAME;
   const logUrl = build.logUrl;
+  const cloudFailureMessage = build.failureInfo.detail;
 
   const tags = build.tags;
   let mentions = getPIC(tags);
@@ -107,6 +112,14 @@ const createSlackMessage = (build) => {
     text: {
       type: 'mrkdwn',
       text: `*Build Log:* <${logUrl}|${cloudBuildId}>`
+    }
+  };
+
+  const failureMessage = {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*Failture Message:* ${cloudFailureMessage}`
     }
   };
 
@@ -140,80 +153,9 @@ const createSlackMessage = (build) => {
   };
 
   message.attachments[0].blocks.push(buildStatus);
-  message.attachments[0].blocks.push(context);
-
-  return message;
-}
-const createFailSlackMessage = (build) => {
-  const statusMessage = statusCodes[build.status].text;
-  const cloudBuildId = build.id;
-  const logUrl = build.logUrl;
-  const cloudBuildTriggerName = build.substitutions.TRIGGER_NAME;
-  const cloudFailureMessage = build.failureInfo.detail;
-
-  const tags = build.tags;
-  let mentions = getPIC(tags);
-  let serviceName = getService(tags);
-  let serviceCategory = getMainCategory(tags);
-  let applicationType = getApplicationType(tags);
-
-  let triggerEventInfo = getTriggerEventInfo(build);
-  let triggerEvent = triggerEventInfo['TRIGGER_EVENT'];
-  let triggerEventData = triggerEventInfo['TRIGGER_EVENT_DATA'];
-  let triggerEventURL = triggerEventInfo['TRIGGER_EVENT_URL'];
-  let commitSHA = triggerEventInfo['COMMIT_SHA'];
-  let commitURL = triggerEventInfo['COMMIT_URL'];
-
-  const title = {
-    type: 'section',
-    text: {
-      type: 'mrkdwn',
-      text: `[ ${statusMessage} ] ${serviceName} ${serviceCategory} ${applicationType} ( \`${cloudBuildTriggerName}\` )`
-    }
-  };
-
-  const buildStatus = {
-    type: 'section',
-    text: {
-      type: 'mrkdwn',
-      text: `*Build Log:* <${logUrl}|${cloudBuildId}>`
-    }
-  };
-
-  const context = {
-    type: 'context',
-    elements: [
-      {
-        type: 'mrkdwn',
-        text: `*cloudFailtureMessage:* ${cloudFailureMessage}`
-      },
-      {
-        type: 'mrkdwn',
-        text: `*${triggerEvent}:* <${triggerEventURL}|${triggerEventData}>`
-      },
-      {
-        type: 'mrkdwn',
-        text: `*COMMIT:* <${commitURL}|${commitSHA}>`
-      },
-      {
-        type: 'mrkdwn',
-        text: `*MENTION:* ${mentions}`
-      }
-    ]
-  };
-
-  const message = {
-    attachments: [
-      {
-        blocks: [
-          title
-        ],
-        color: statusCodes[build.status].color
-      }
-    ]
-  };
-
-  message.attachments[0].blocks.push(buildStatus);
+  if(statusCodes[build.status] == 'FAILURE'){
+    message.attachments[0].blocks.push(failureMessage);
+  }
   message.attachments[0].blocks.push(context);
 
   return message;
@@ -241,16 +183,12 @@ exports.helloPubSub  = (event, context) => {
   }
 
   // Send message to Slack.
-  if (build.status.includes('FAILURE')){
-    slackMessage = createFailSlackMessage(build);
-  }else{
-    slackMessage = createSlackMessage(build);
-  }
+  slackMessage = createSlackMessage(build);
 
   const tags = build.tags;
-  if (tags.includes('DEV')){
+  if (getEnviornment(tags).includes('DEV')){
     webhook = new IncomingWebhook(process.env.SLACK_DEV_CICD_MONITORING_WEBHOOK_URL);
-  }else if(tags.includes('PROD')){
+  }else if(getEnviornment(tags).includes('PROD')){
     webhook = new IncomingWebhook(process.env.SLACK_PROD_CICD_MONITORING_WEBHOOK_URL);
   }else{
     webhook = new IncomingWebhook(process.env.SLACK_TEST_CICD_MONITORING_WEBHOOK_URL);
