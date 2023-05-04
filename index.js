@@ -34,26 +34,12 @@ const statusCodes = {
     text: '빌드 시작' // 'New build in progress'
   }
 };
-const getEnviornment = (tags) => {
-  const environment = tags.find(tag => tag.startsWith("Env_"));
-  return environment ? environment.split("Env_")[1] : "";
+
+const getParsedTags = (tags, prefix) => {
+  let parsedTags = tags.find(tag => tag.startsWith(prefix));
+  return parsedTags ? parsedTags.split(prefix)[1] : "";
 }
-const getService = (tags) => {
-  const serviceTag = tags.find(tag => tag.startsWith("Service_"));
-  return serviceTag ? serviceTag.split("Service_")[1] : "";
-}
-const getMainCategory = (tags) => {
-  const mainCategoryTag = tags.find(tag => tag.startsWith("MainCategory_"));
-  return mainCategoryTag ? mainCategoryTag.split("MainCategory_")[1] : "";
-}
-const getApplicationType = (tags) => {
-  const applicationTypeTag = tags.find(tag => tag.startsWith("AppType_"));
-  return applicationTypeTag ? applicationTypeTag.split("AppType_")[1] : "";
-}
-const getPIC = (tags) => {
-  const picTag = tags.find(tag => tag.startsWith("PIC_"));
-  return picTag ? picTag.split("PIC_")[1] : "";
-}
+
 const getTriggerEventInfo = (build) => {
   let triggerEventInfo = {};
   let gitRepoName = build.substitutions.REPO_NAME;
@@ -78,19 +64,19 @@ const getTriggerEventInfo = (build) => {
 
   return triggerEventInfo;
 }
+
 // createSlackMessage create a message from a build object.
 const createSlackMessage = (build) => {
   const statusMessage = statusCodes[build.status].text;
   const cloudBuildId = build.id;
   const cloudBuildTriggerName = build.substitutions.TRIGGER_NAME;
   const logUrl = build.logUrl;
-  const cloudFailureMessage = build.failureInfo.detail;
 
   const tags = build.tags;
-  let mentions = getPIC(tags);
-  let serviceName = getService(tags);
-  let serviceCategory = getMainCategory(tags);
-  let applicationType = getApplicationType(tags);
+  let mentions = getParsedTags(tags, "PIC_");
+  let serviceName = getParsedTags(tags, "Service_");
+  let serviceCategory = getParsedTags(tags, "MainCategory_");
+  let applicationType = getParsedTags(tags, "AppType_");
 
   let triggerEventInfo = getTriggerEventInfo(build);
   let triggerEvent = triggerEventInfo['TRIGGER_EVENT'];
@@ -112,14 +98,6 @@ const createSlackMessage = (build) => {
     text: {
       type: 'mrkdwn',
       text: `*Build Log:* <${logUrl}|${cloudBuildId}>`
-    }
-  };
-
-  const failureMessage = {
-    type: 'section',
-    text: {
-      type: 'mrkdwn',
-      text: `*Failture Message:* ${cloudFailureMessage}`
     }
   };
 
@@ -153,13 +131,23 @@ const createSlackMessage = (build) => {
   };
 
   message.attachments[0].blocks.push(buildStatus);
-  if(statusCodes[build.status] == 'FAILURE'){
+  // Add failure cause message when cloud build fails
+  if(build.status.includes('FAILURE')){
+    const cloudFailureMessage = build.failureInfo.detail;
+    const failureMessage = {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Failure Message:* ${cloudFailureMessage}`
+      }
+    };
     message.attachments[0].blocks.push(failureMessage);
   }
   message.attachments[0].blocks.push(context);
 
   return message;
 }
+
 /**
  * Triggered from a message on a Cloud Pub/Sub topic.
  *
@@ -168,9 +156,7 @@ const createSlackMessage = (build) => {
  */
 exports.helloPubSub  = (event, context) => {
 
-  const build = event.data
-    ? JSON.parse(Buffer.from(event.data, 'base64').toString())
-    : null;
+  const build = event.data ? JSON.parse(Buffer.from(event.data, 'base64').toString()) : null;
 
   if (build == null) {
     return;
@@ -178,17 +164,15 @@ exports.helloPubSub  = (event, context) => {
 
   // Cloud build all status : 'CANCELLED', 'QUEUED', 'WORKING', 'SUCCESS', 'FAILURE', 'INTERNAL_ERROR', 'TIMEOUT'
   const status = ['QUEUED', 'CANCELLED', 'WORKING', 'SUCCESS', 'FAILURE', 'INTERNAL_ERROR', 'TIMEOUT'];
-  if (status.indexOf(build.status) === -1) {
-    return;
-  }
+  if (status.indexOf(build.status) === -1) return;
 
   // Send message to Slack.
   slackMessage = createSlackMessage(build);
 
   const tags = build.tags;
-  if (getEnviornment(tags).includes('DEV')){
+  if (getParsedTags(tags, "Env_").includes('DEV')){
     webhook = new IncomingWebhook(process.env.SLACK_DEV_CICD_MONITORING_WEBHOOK_URL);
-  }else if(getEnviornment(tags).includes('PROD')){
+  }else if(getParsedTags(tags, "Env_").includes('PROD')){
     webhook = new IncomingWebhook(process.env.SLACK_PROD_CICD_MONITORING_WEBHOOK_URL);
   }else{
     webhook = new IncomingWebhook(process.env.SLACK_TEST_CICD_MONITORING_WEBHOOK_URL);
