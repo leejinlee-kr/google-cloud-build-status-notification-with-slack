@@ -70,8 +70,8 @@ const getParsedTags = (tags, prefix) => {
     }
     return str;
   }
-
-  return parsedTags ? parsedTags.split(prefix)[1] : "";
+  // decode the string
+  return parsedTags ? Buffer.from(parsedTags.split(prefix)[1], 'base64').toString('utf-8') : "";
 }
 
 const getTriggerEventInfo = (build) => {
