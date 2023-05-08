@@ -4,6 +4,21 @@ require('dotenv').config();
 let webhook;
 let slackMessage;
 
+const slackCodes = {
+  A_PO : 'SLACK_TEAM_MENTION_CODE',
+  B_PO : 'SLACK_TEAM_MENTION_CODE',
+  C_PO : 'SLACK_TEAM_MENTION_CODE',
+  A_DEVELOPER : 'SLACK_TEAM_MENTION_CODE',
+  B_DEVELOPER : 'SLACK_TEAM_MENTION_CODE',
+  C_DEVELOPER : 'SLACK_TEAM_MENTION_CODE',
+  A_TEAM : 'SLACK_TEAM_MENTION_CODE',
+  B_TEAM : 'SLACK_TEAM_MENTION_CODE',
+  C_TEAM : 'SLACK_TEAM_MENTION_CODE',
+  USER_A : 'SLACK_USER_MENTION_CODE',
+  USER_B : 'SLACK_USER_MENTION_CODE',
+  USER_C : 'SLACK_USER_MENTION_CODE'
+};
+
 const statusCodes = {
   CANCELLED: {
     color: '#fbbc05',
@@ -37,6 +52,25 @@ const statusCodes = {
 
 const getParsedTags = (tags, prefix) => {
   let parsedTags = tags.find(tag => tag.startsWith(prefix));
+
+  // Mention Tag가 존재할 경우
+  if (prefix.includes(process.env.PREFIX_PIC)){
+    let mentions = parsedTags.split(prefix)[1].split('.');
+    let str = ''
+    for (let i =0; i< mentions.length; i++){
+      if(mentions[i].includes('TEAM')){
+        str = str + "<!subteam^" + slackCodes[mentions[i]] + "> "
+      }else if(mentions[i].includes('PO')) {
+        str = str + "<!subteam^" + slackCodes[mentions[i]] + "> "
+      }else if(mentions[i].includes('DEVELOPER')) {
+        str = str + "<!subteam^" + slackCodes[mentions[i]] + "> "
+      }else{
+          str = str + "<@" + slackCodes[mentions[i]] + "> "
+      }
+    }
+    return str;
+  }
+
   return parsedTags ? parsedTags.split(prefix)[1] : "";
 }
 
